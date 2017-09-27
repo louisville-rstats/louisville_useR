@@ -1,0 +1,795 @@
+---
+title: "Time Series Modeling - A Brief Overview"
+date: "September 25, 2017"
+output:
+  html_notebook:
+    fig_caption: yes
+    highlight: textmate
+    theme: cosmo
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+  html_document:
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+---
+
+## Introduction
+
+- When a variable is measure sequentially in time over or at a fixed interval, known as the *sampling interval*, the resulting data form a *time series*. 
+
+Key Features:
+
+- Trends and Seasonal Variations
+
+- Observations close together in time tend to be correlated or *serially dependent*
+
+
+## Setup
+
+Packages to install if you don't already have them:
+
+- `lubridate`
+- `xts`
+- `zoo`
+- `devtools`
+
+
+```{r}
+rm(list = ls()) # clear environment
+```
+
+## Date & Time Object Basics
+
+```{r}
+Sys.Date()
+```
+
+```{r}
+Sys.time()
+str(Sys.time())
+```
+
+```{r}
+ct <- as.POSIXct(Sys.time())
+lt <- as.POSIXlt(Sys.time())
+ct; lt
+```
+
+
+```{r}
+str(ct); str(lt)
+```
+
+- `POSIXct` is a numeric object
+- `POSIXlt` is a list object
+
+
+```{r}
+mode(lt); mode(ct)
+```
+
+```{r}
+# use unlist to flatten to vector
+names(unlist(lt))
+```
+
+Class "POSIXct" represents the (signed) number of seconds since the beginning of 1970 (UTC).
+
+```{r}
+as.numeric(ct)
+```
+
+### Converting text to Date-time
+
+- `strptime`
+
+```{r}
+str("2017-01-01")
+as.Date("2017-01-01")
+str(as.Date("2017-01-01"))
+```
+
+
+
+```{r}
+20170101
+str(20170101)
+# as.Date(20170101) this would not work
+```
+
+
+```{r}
+# as.Date(20170101, format = "%Y%m%d") would not work
+as.Date(as.character(20170101), format = "%Y%m%d")
+as.Date("20170101", format = "%Y%m%d")
+```
+
+- `?strptime` is your friend here with widely implemented conversion specifications in the Details section. [C spec resource](http://pubs.opengroup.org/onlinepubs/009695399/functions/strftime.html)
+
+### Time Periods
+
+- `seq` has some time-based options.
+
+```{r}
+seq(from = as.Date("2017-01-01"), to = as.Date("2017-01-31"), by = "days")
+```
+
+```{r}
+my.seq <- seq(from = as.Date("2017-01-01"), to = as.Date("2017-06-30"), by = "months")
+my.seq
+```
+
+
+```{r}
+str(my.seq)
+is.ts(my.seq)
+```
+
+### Time Series Objects
+
+
+```{r}
+ts(1:10)
+# monthly
+ts(1:10, start = c(2017, 1), frequency = 12)
+# quarterly
+ts(1:10, start = c(2017, 1), frequency = 4)
+# annual
+ts(1:10, start = c(2017, 1), frequency = 1)
+```
+
+Only works with certain frequencies...
+
+```{r}
+ts(1:10, start = c(2017, 1), frequency = 365)
+```
+
+```{r}
+my.ts <- ts(1:12, start = c(2017, 1), frequency = 12)
+str(my.ts)
+attributes(my.ts)
+```
+
+#### Other Useful Packages
+
+**`zoo`**
+
+Particularly aimed at irregular time series.
+
+```{r}
+zoo::as.zoo(my.ts)
+```
+
+
+
+**`xts`**
+
+eXtensible Time Series.  Uniform handling of time-based data.  Extends `zoo` and reduces compatability issues.
+
+```{r,message=FALSE}
+xts::as.xts(my.ts)
+```
+
+**`lubridate`**
+
+R Studio group package which like many of their offerings makes things very simple to understand.  Especially good for extracting time-based components and performing math.  Concepts of duration, interval, and period are well worth exploring.
+
+In most instances, it is relatively easy to move between `ts`, `zoo`, and `xts` objects.
+
+## Steps in the modeling process
+
+From Max Kuhn:
+
+1.  Understand the data
+  - Visualize!
+  - If you have more than 1 predictor, could be an indication that you need to pre-process.
+2. Build and evaluate a model
+  - Take a random sample & use the rest to understand model performance
+  - Residuals are an important source of information!
+  - Root mean squared error is commonly used to evaluate model performance.  SMAPE and AIC are two others I've used with some frequency.
+3.  Mathematically define the relationship
+  - Be careful not to use the training set to evaluate model performance
+  - *Resampling* can help to avoid this (k-fold CV, GCV, Monte Carlo CV, Bootstrap)
+  - Different models can be more susceptible to certain problems
+    - Quadratic / log models fitting poorly at the extremes
+  - Be sure to understand aspects of the model you are using
+    - Tuning parameter in MARS model.
+
+#### Data Splitting
+
+- How the training and test sets are determined should relect how the model will be applied
+  - *extrapolation* vs. *interpolation*
+  
+#### Predictor Data
+
+- Feature selection - minimum number of relevant predictors
+
+#### Estimating Performance
+
+- Quantitative assessments (RMSE & AIC)
+- Visualize again
+
+#### Evaluating Several Models
+
+- Basis for this general discussion as an introduction
+  - "No Free Lunch" theorem (Wolpert, 1996)
+
+#### Model Selection
+
+- Some modeling techniques may be excluded (linear, MARS, etc) depending on the application.  Choosing *between* models.
+- In the MARS, you can alter tuning parameter to get the best result.  This is an example of choosing *within* different MARS models.
+
+**Understand the data AND the objective of the model**
+
+#### Data Pre-processing
+
+- **Unsupervised** - the outcome variable is not considered by the pre-processing techniques.
+- **Supervised** - the outcome is utilized to pre-process the data.
+- **Feature engineering** - how the predictors are encoded, including combinations and transformations.  This can be especially important in time series modeling...
+
+```{r}
+require(lubridate)
+current_time <- now()
+current_time
+```
+
+This contains a LOT of information!
+
+```{r}
+year(current_time); month(current_time); month.abb[month(current_time)]; day(current_time)
+```
+
+### Data Transformations for Individual Predictors
+
+#### Centering and Scaling
+
+- The only real downside is a loss of interpretibility
+- The benefits are improved model and numerical stability
+
+#### Transformations to Resolve Skewness
+
+A general rule of thumb to consider is that skewed data whose ratio of the highest value to the lowest value is greater than 20 have significant skewness.
+
+Skewness statistic can be used as a diagnostic:
+
+- Symmetric:    0
+- Right skewed: > 0 
+- Left skewed:  < 0 
+
+$$ skewness = {{\sum{(x_i - \bar{x})^3}} \over {(n - 1) v^{3/2}}} $$
+$$ v = {{\sum(x_i - \bar{x})^2} \over (n - 1)}  $$
+
+- log, square root and inverse can all be viable alternatives for eliminating or reducing the skew
+- Box-Cox propose a *family* of transformations that are indexed by a parameter $\lambda$
+
+
+### Data Transformations for Multiple Predictors
+
+##### Transformations to resolve outliers
+
+Great care should be taken not to prematurely remove values - check if there were recording errors.  
+
+Be extremely cautious in removing outliers in small sample sizes - they may reveal things that the data collected does not readily show.
+
+- Tree-based classification models are often resistent to outliers.
+- If a model is considered to be especially sensitive to outliers, one data transformation that can minimize the problem is the *spatial sign* (Serneels et al. 2006).
+
+$$ x^*_ij = {x_ij} \over {\sum^P_j{ = 1^{x^2_ij}}} $$
+
+#### Data Reduction and Feature Extraction
+
+Reduce the data by generating a smaller set of predictors that seek to capture the majority of the information in the original variables.  This is often called *signal extraction* or *feature extraction*
+
+$PCA$ is a commonly used data reduction technique.  Linear combinations of the predictors, known as principal components (PCs) capture the most possible variance.  
+
+#### Dealing with missing values
+
+It is important to know *why* the value is missing.  "Informative missingness" shows if the missing data is related to the pattern of missing data.
+
+Missing data should not be confused with *censored* data where the exact value is missing but something is known about its value.  
+
+#### Removing Predictors
+
+Potential advantages to removing predictors prior to modeling:
+
+1.  Fewer predictors means decreased computational time & complexity
+
+2.  If two predictors are highly correlated, this implies they are measuring the same underlying information.  Removing one should not compromize the performance of the model and may lead to greater interpretibility.  
+
+3.  Some models may be crippled by predictors with degenerates distributions.  Removing problematic variables can lead to a significant improvement in model performance and interpretability.  
+
+
+#### *Between-Predictor Correlations*
+
+*Collinearity* is the term for a situation where a pair of predictor variables have a substantial correlation with each other.  
+
+Using highly correlated predictors in techniques like linear regression can result in highly unstable models, numerical errors, and degraded model performance.  
+
+##### Adding Predictors
+
+When a predictor is categorical, such as gender or race, it is common to decompose the predictor into a set of more specific variables.  
+
+
+#### Binning Predictors
+
+- Methods to *avoid*
+  - Manual binning of continuous data can cause a lot of issues
+    - Can cause significant loss of performance in model
+    - Loss of precision when predictors are categorized
+    - Categorizing variables can lead to a high rate of false positives
+
+## Stationary Models
+
+- Time series will often have well-defined components such as a trend & seasonal pattern
+- Residuals will usually be correlated in time even if linear model is well specified.
+- Stationary models may well be suited for residual series that contain no obvious trend or seasonal components
+- Then combined with original model to improve forecasts.
+
+### Moving average models
+
+#### Correlogram and simulation
+
+Below is a simple autocorrelation function for an MA(*q*) process.
+
+```{r}
+rho <- function(k, beta) {
+  q <- length(beta) - 1
+  if (k > q) ACF <- 0 else {
+    s1 <- 0; s2 <- 0
+    for(i in 1:(q-k+1)) s1 <- s1 + beta[i] * beta[i + k]
+    for(i in 1:(q+1)) s2 <- s2 + beta[i]^2
+    ACF <- s1 / s2
+  }
+  ACF
+}
+```
+
+```{r}
+beta <- c(1, 0.7, 0.5, 0.2)
+rho.k <- rep(1, 10)
+for(k in 1:10) rho.k[k] <- rho(k, beta)
+plot(0:10, c(1, rho.k), pch = 4, ylab = expression(rho[k])); abline(0, 0)
+```
+
+```{r}
+set.seed(1)
+b <- c(0.8, 0.6, 0.4)
+x <- w <- rnorm(1000)
+for (t in 4:1000) {
+  for (j in 1:3) x[t] <- x[t] + b[j] * w[t-j]
+}
+plot(x, type = "l"); acf(x)
+```
+
+
+### Fitted MA models
+```{r}
+# ?ar
+# ?arima
+```
+
+`arima` function does not subtract the mean by default and estimated an intercept term.
+
+```{r}
+x.ma <- arima(x, order = c(0, 0, 3))
+```
+
+### Mixed models: The ARMA process
+
+A series ${x_t}$ is an autoregessive process of order $p$, an AR($p$) process, if
+
+$$ x_t = \alpha_1 x_{t-1} + \alpha_2 x_{t-2} + ... + \alpha_p x_{t-p} + w_t $$
+A useful class of models are obtained when AR and MA terms are added together in a single expression.
+
+Following points should be noted about an ARMA$(p, q)$ process:
+
+1.  The process is stationary when the roots of $\theta$ all exceed unity in absolute value.
+2.  The process is invertible when the roots of $\phi$ all exceed unity in absolute value.
+3.  The AR$(p)$ model is the special case ARMA$(p, 0)$.
+4.  The AR$(q)$ model is the special case ARMA$(0, q)$.
+5. *Parameter parsimony.*  An ARMA model will often be more parameter efficient than a single MA or AR model.
+
+### Electricity Production Series
+
+```{r}
+url <- "https://raw.githubusercontent.com/dallascard/Introductory_Time_Series_with_R_datasets/master/cbe.dat"
+
+cbe <- read.table(url, header = T)
+
+elec.ts <- ts(cbe[, 3], start = 1958, freq = 12)
+time <- 1:length(elec.ts)
+Imth <- cycle(elec.ts)
+elec.lm <- lm(log(elec.ts) ~ time + I(time^2) + factor(Imth))
+acf(resid(elec.lm))
+
+```
+
+Non-stationary model with a stochastic seasonal component can take care of the seasonal 12 month.
+
+The best fitting ARMA$(p, q)$ model can be chosen by using the smallest $AIC$ either by trying a range of combinations of $p$ and $q$ in the `arima` function or using a `for` loop with upper bounds on $p$ and $q$.
+
+- AIC:  Akaike Information Criterion (AIC; Akaike, 1974), penalizes models with too many parameters:
+
+Basically a means of selecting models amonst options.
+
+$$ AIC = -2 x log-likelihood + 2 x number of parameters $$
+
+```{r}
+best.order <- c(0, 0, 0)
+best.aic <- Inf
+for (i in 0:2) for (j in 0:2) { 
+  # 2 is upper bound chosen here
+  fit.aic <- AIC(arima(resid(elec.lm), order = c(i, 0, j)))
+  if(fit.aic < best.aic) {
+    best.order <- c(i, 0, j)
+    best.arma <- arima(resid(elec.lm), order = best.order)
+    best.aic = fit.aic
+  }
+}
+```
+
+
+```{r}
+best.order; acf(resid(best.arma))
+```
+
+predict
+
+```{r}
+new.time <- seq(length(elec.ts), length = 36)
+new.data <- data.frame(time = new.time, Imth = rep(1:12, 3))
+predictlm <- predict(elec.lm, newdata = new.data)
+predictarma <- predict(best.arma, n.ahead = 36)
+elec.pred <- ts(exp(predictlm + predictarma$pred), start = 1991, freq = 12)
+ts.plot(cbind(elec.ts, elec.pred), lty = 1:2)
+
+
+
+```
+
+Not taking account of that annual seasonality completely...
+
+
+## Non-Stationary Models
+
+Many time series are non-stationary because of seasonal effects or trends.
+
+Random walks, which characterize many types of series, are non-stationary but can be transformed to a stationary series by first order differencing.  We can extend this random walk model by including autoregressive and moving average terms.
+
+A note on terminology - as the differenced series needs to be aggregated or *'integrated'* to recover the original series, this is an *autoregressive integrated moving average* or ARIMA model.
+
+Series may also be non-stationary because the variance is serially correlated (known as *conditional heteroskedasticity*), which results in periods of high volatility (think of financial markets).  Methods for dealing with this are using an autoregressive model for the variance - *autoregressive conditional heteroskedastic* or ARCH model.  General version of this - GARCH.
+
+#### Non-seasonal ARIMA models
+
+- Differencing a series $\{x_t\}$ can remove trends, whether these trends are stochastic, as in a random walk, or deterministic, as in the case of a linear trend.
+
+- In the case of a random walk, ${x_t} = {x_{t-1}} + {w_t}$, the first-order differenced series is white noise & so is stationary.
+- With a linear trend with white noise errors, ${x_t} = a + bt + {w_t}$, then $\Delta{x_t} = {x_{t-1}} = b + {w_t} - {w_{t-1}}$, which is a stationary moving average process rather than white noise.
+
+```{r}
+url <- "https://raw.githubusercontent.com/dallascard/Introductory_Time_Series_with_R_datasets/master/cbe.dat"
+
+cbe <- read.table(url, header = T)
+
+elec.ts <- ts(cbe[, 3], start = 1958, freq = 12)
+# layout(c(1, 1, 2, 3))
+plot(elec.ts); plot(diff(elec.ts)); plot(diff(log(elec.ts)))
+
+```
+
+Note on the `diff` function:
+
+- Change the `lag` argument to adjust which lag to use.  Default is unity but `diff(x, lag = 12)` will remove both a linear trend adn additive seasonal effects in a monthly series.
+- `differences` can allow for $n^{th}$ order differencing and can avoid repeated calls.  Second-order differencing may sometimes successfully reduce a series with an underlying curve trend to white noise.
+
+
+```{r}
+diff(1:10); diff(diff(1:10)); diff(1:10, d = 2)
+```
+
+##### Simulation and fitting
+
+Data for the $ARIMA(p, d, q)$ model $x_t = 0.5x_{t-1} + x_{t-1} - 0.5x_{t-2} + w_t + 0.3w_{t-1}$ are simulated and the model fitted to the simulated series to recover the parameter estimates:
+
+```{r}
+set.seed(1) # make simulated random data repeatable
+x <- w <- rnorm(1000)
+for(i in 3:1000) x[i] <- 0.5 * x[i - 1] + x[i - 1] - 0.5 * x[i - 2] + w[i] + 0.3 * w[i - 1]
+
+arima(x = x, order = c(1, 1, 1))
+
+```
+
+Writing it like this can help you ensure you really understand what you're doing.  Alternatively, you could make your life easier and use `arima.sim`
+
+#### IMA(1, 1) model fitted to the beer production series
+
+```{r}
+beer.ts <- ts(cbe[, 2], start = 1958, freq = 12)
+beer.ima <- arima(beer.ts, order = c(0, 1, 1))
+beer.ima
+```
+
+From this output the fitted model is $x_t = x_{t-1} + w_t - 0.33w_{t-1}$.
+
+Use the `predict` function with `n.ahead` set to the number of values in the future you want to predict.
+
+
+```{r}
+beer.1991 <- predict(beer.ima, n.ahead = 12); beer.1991
+```
+
+
+```{r}
+acf(resid(beer.ima))
+```
+
+### Seasonal ARIMA models
+
+A seasonal ARIMA model uses differencing at a lag equal to the number of seasons $(s)$ to remove the additive seasonal effects.  As with lag 1 differencing to remove a trend, the lag $s$ differencing introduces a moving average term.
+
+
+```{r}
+AIC(arima(log(elec.ts), order = c(1, 1, 0), seas = list(order = c(1, 0, 0), 12)))
+```
+```{r}
+AIC(arima(log(elec.ts), order = c(0, 1, 1), seas = list(order = c(0, 0, 1), 12)))
+```
+
+Can check by trial-and-error but can write a simple function to check...
+
+To avoid over parametrisation, the *consistent* Akaike Information Criteria (CAIC; see Bozdogan, 1987) can be used in model selection.
+
+```{r}
+get.best.arima <- function(x.ts, maxord = c(1, 1, 1, 1, 1, 1)) {
+  best.aic <- 1e8
+  n <- length(x.ts)
+  for(p in 0:maxord[1]) for(d in 0:maxord[2]) for(q in 0:maxord[3]) for(P in 0:maxord[4]) for(D in 0:maxord[5]) for(Q in 0:maxord[6])
+  {
+    fit <- arima(x.ts, order = c(p, d, q), 
+                 seas = list(order = c(P, D, Q),
+                             frequency(x.ts)), method = "CSS")
+    fit.aic <- -2 * fit$loglik + (log(n) + 1) * length(fit$coef)
+    if(fit.aic < best.aic) {
+      best.aic <- fit.aic
+      best.fit <- fit
+      best.model <- c(p, d, q, P, D, Q)
+    }
+  }
+  list(best.aic, best.fit, best.model)
+}
+
+best.arima.elec <- get.best.arima(log(elec.ts), maxord = c(2, 2, 2, 2, 2, 2))
+best.fit.elec <- best.arima.elec[[2]]
+best.arima.elec[[3]]
+
+ts.plot(cbind(window(elec.ts, start = 1981), exp(predict(best.fit.elec, 12)$pred)), lty = 1:2)
+
+```
+
+Best fitting model using terms up to second order is $ARIMA(0, 1, 1)(2, 0, 2).  Higher-order terms could be tried but likely unnecessary since the residuals are approximately equal to white noise...
+
+```{r}
+acf(resid(best.fit.elec))
+```
+
+### ARCH Models
+
+Data is daily returns of S&P500 in 1990s
+
+```{r}
+require(MASS)
+data("SP500")
+plot(SP500, type = "l"); acf(SP500)
+
+```
+
+Looks pretty stationary - but variance appears to be correlated.  When a variance is not constant in time but changes in a regular way, the series is called *heteroskedastic*.  If a series exihibits periods of increased variance, so the variance is correlated in time (as observed here), the series exhibits volatility and is called *conditional heterskedastic*.
+
+Note the correlogram does not look significantly different from white noise.  However, the series is non-stationary since the variance is different at different times.  Volatility can be detected by looking at a correlogram of the squared values since the squared values are equivalent to the variance (provided adjusted to have a mean of zero).  
+
+```{r}
+acf((SP500 - mean(SP500))^2)
+```
+
+Here we can see there is evidence of serial correlation in the squared values, so there is evidence of conditional heteroskedastic behavior (volatility).
+
+##### Modeling volatility:  Definition of the ARCH model
+
+Model must allow for conditional changes in the variance.  One approach is to use an autoregressive model for the variance process.
+
+A series $\{\epsilon_t\}$ is first order autoregressive conditional heteroskedastic, denoted $ARCH(1)$, if 
+
+$$ \epsilon_t = {w_t} \sqrt{{\alpha_0} + {\alpha_1}{\epsilon^2_{t-1}}} $$
+where $\{w_t\}$ is white noise with zero mean and unit variance and $\alpha_0$ and $\alpha_1$ are model parameters.
+
+
+####  Extensions and GARCH models
+
+First order $ARCH$ models can be extended to a $p$th-order process by including higher lags.  A $GARCH$ (generalized) model can be fitted using the `garch` function in the `tseries` library.
+
+
+#### Simulation and fitted GARCH model
+
+```{r}
+set.seed(1)
+alpha0 <- 0.1
+alpha1 <- 0.4
+beta1 <- 0.2
+w <- rnorm(10000)
+a <- h <- rep(0, 10000)
+for(i in 2:10000) {
+  h[i] <- alpha0 + alpha1 * (a[i - 1]^2) + beta1 * h[i - 1]
+  a[i] <- w[i] * sqrt(h[i])
+}
+acf(a)
+acf(a^2)
+
+
+```
+
+Note uncorrelated values but correlated squared values.
+
+Default for `garch` model is $GARCH(1, 1)$ but higher-order can be specified with `order = c(p, q)`
+
+```{r,message=FALSE}
+require(tseries)
+a.garch <- garch(a, grad = "numerical", trace = F)
+confint(a.garch)
+```
+
+- `trace = F` suppresses output
+- `grad = "numerical"` is slightly more robust than default
+
+#### Fit to S&P 500
+
+If $GARCH$ model is suitable the residual series should appear to be a realization of white noise with mean 0 and unit variance.  In the case of $GARCH(1, 1)$:
+
+$$ \hat{h}_t = \hat{\alpha}_0 + \hat{\alpha}_1{\epsilon^2_{t-1}} + \hat{\beta}_1\hat{h}_{t-1}$$
+```{r}
+sp.garch <- garch(SP500, trace = F)
+sp.res <- sp.garch$res[-1]
+acf(sp.res)
+acf(sp.res^2)
+```
+
+Both residual and squared residual behave like white noise.
+
+##### Volatility in climate series
+
+```{r}
+url <- "https://raw.githubusercontent.com/dallascard/Introductory_Time_Series_with_R_datasets/master/stemp.dat"
+stemp <- scan(url)
+stemp.ts <- ts(stemp, start = 1850, freq = 12)
+plot(stemp.ts)
+
+```
+
+```{r,message=FALSE,error=FALSE}
+stemp.best <- get.best.arima(stemp.ts, maxord = rep(2, 6))
+stemp.best[[3]]
+```
+
+```{r}
+stemp.arima <- arima(stemp.ts, order = c(1, 1, 2), seas = list(order = c(2, 0, 1), 12))
+t(confint(stemp.arima))
+```
+
+Second seasonal AR component is not significantly different from zero, and therefore, the model is refitted leaving this component out:
+
+```{r}
+stemp.arima <- arima(stemp.ts, order = c(1, 1, 2), seas = list(order = c(1, 0, 1), 12))
+t(confint(stemp.arima))
+```
+
+Check fit with correlogram of residuals and volatility, correlogram of squared residuals:
+
+```{r}
+stemp.res <- resid(stemp.arima)
+acf(stemp.res); acf(stemp.res^2)
+```
+
+Similar to what we've seen before, squared residuals show evidence of volatility.  To solve, a $GARCH$ model is fitted to the residuals:
+
+```{r}
+stemp.garch <- garch(stemp.res, trace = F)
+t(confint(stemp.garch))
+```
+
+```{r}
+stemp.garch.res <- resid(stemp.garch)[-1]
+acf(stemp.garch.res)
+acf(stemp.garch.res^2)
+```
+
+##### GARCH in forecasts and simulation
+
+If a $GARCH$ model is fitted to the residual errors of a fitted time series model, it will not influence the *average* prediction at some point in time since the mean of the residual erros is zero.  A fitted $GARCH$ model will affect the variance of simulated predicted values and thus result in periods of changing variance or volatility in simulated series.  
+
+Using these techniques to simulate studies in areas such as insurance, finance, and climatology is important because periods of high variability lead to untoward events and must be modeled in a realistic manner.
+
+## Long-Memory Processes
+
+Some time series exhibit marked correlations at high lags, and they are referred to as long-memory processes.
+
+Long Short Term Memory Networks are a special kind of RNN which are especially good at handling long-memory processes.  They have excellent potential for time series forecasting and have already been put to great use at Uber.  R Studio has a package to interface to the keras API for this.
+
+## Danger Zone
+
+![](danger_zone.gif)
+
+These are potentially exciting and useful but can also be very easy to misuse.
+
+#### Facebook `Prophet` Package
+
+Easy to use implementation for robust trend-based time series forecasts.  Very easy to get a forecast.  Very easy to get a bad forecast.
+
+```{r}
+require(prophet)
+prophet.fcst <- prophet(data.frame(ds = seq(as.Date("1958-01-01"), as.Date("1990-12-01"), by = "m"), y = cbe[,3]))
+summary(prophet.fcst)
+future <- make_future_dataframe(prophet.fcst, periods = 10, freq = "month")
+forecast <- predict(prophet.fcst, future)
+plot(prophet.fcst, forecast)
+```
+
+
+#### Anomaly Detection
+
+[This](https://github.com/twitter/AnomalyDetection) is a potentially very interesting time series analysis package produced by Twitter.
+
+Depending on the use of your forecasts, close to real-time identification of unusual events can be a very important tool.
+
+## Resources / Credits
+
+These examples and ideas heavily draw on these two books - highly recommend buying and working your way through:
+
+- [Introductory Time Series with R](https://goo.gl/FbSB1z)
+- [Applied Predictive Modeling](http://www.springer.com/us/book/9781461468486)
+
+
+#### Online Learning
+
+- [Forecasting Using R on datacamp](https://www.datacamp.com/courses/forecasting-using-r)
+- [xts cheat sheet](https://www.datacamp.com/community/blog/r-xts-cheat-sheet?utm_content=buffer0b542&utm_medium=social&utm_source=twitter.com&utm_campaign=buffer#gs.Sn0D9go)
+- [time series analysis multi-part](http://www.business-science.io/timeseries-analysis/2017/08/30/tidy-timeseries-analysis-pt-4.html)
+
+#### Books
+
+- [Forecasting Principles & Practice](http://otexts.org/fpp2/)
+- [A Little Book of R for Time Series](http://a-little-book-of-r-for-time-series.readthedocs.io/en/latest/)
+- [Introductory Time Series with R](https://goo.gl/FbSB1z)
+- [Applied Predictive Modeling](http://www.springer.com/us/book/9781461468486)
+
+#### CRAN Task Views
+
+- [Time Series](https://cran.r-project.org/web/views/TimeSeries.html)
+- [Econometrics](https://cran.r-project.org/web/views/Econometrics.html)
+- [Finance](https://cran.r-project.org/web/views/Finance.html)
+
+#### Packages
+
+- [lubridate](https://cran.r-project.org/web/packages/lubridate/lubridate.pdf)
+- [xts](https://cran.r-project.org/web/packages/xts/xts.pdf)
+- [zoo](https://cran.r-project.org/web/packages/zoo/zoo.pdf)
+- [chron](https://cran.r-project.org/web/packages/chron/chron.pdf)
+- [timeDate](https://cran.r-project.org/web/packages/timeDate/timeDate.pdf)
+- [tSeries](https://cran.r-project.org/web/packages/tseries/tseries.pdf)
+- [caret](https://cran.r-project.org/web/packages/caret/caret.pdf)
+- [forecast](https://cran.r-project.org/web/packages/forecast/forecast.pdf)
+- [prophet](https://cran.r-project.org/web/packages/prophet/prophet.pdf)
+
+#### People
+
+- [Rob J Hyndman](https://robjhyndman.com/)
+
+
+## Session Info
+
+```{r}
+devtools::session_info()
+```
+
